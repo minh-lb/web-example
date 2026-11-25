@@ -34,3 +34,55 @@ test('signed API, authorization, persistence, duplicate conflict and worker retr
     assert.equal((await db.rows('SELECT status FROM background_jobs WHERE id=?',[job.id]))[0].status,'COMPLETED');
   }finally{await db.onModuleDestroy();}
 });
+
+test('service, booking, customer and queue detail contracts with role boundaries', async () => {
+  const db = new Database();
+  try {
+    await reset(db);
+    const payload = {name:'Integration service',description:'Created for backend integration',category:'Consultation',durationMinutes:60,price:100000,color:'indigo',active:true};
+    assert.equal((await req('POST','/api/services',payload,'staff')).status,403);
+    const created=await req('POST','/api/services',payload);
+    assert.equal(created.status,201);
+    const service=await created.json() as any;
+    assert.equal((await req('GET','/api/services/'+service.id,undefined,'staff')).status,200);
+    assert.equal((await req('GET','/api/services/invalid')).status,400);
+    assert.equal((await req('PATCH','/api/services/'+service.id,{price:200000})).status,200);
+    const bookingResponse=await req('POST','/api/bookings',{serviceId:service.id,date:today(40),timeSlot:'17:00',customerName:'Integration Customer',customerEmail:'integration@example.com',customerPhone:'0901234567'},'staff');
+    assert.equal(bookingResponse.status,201);
+    const booking=await bookingResponse.json() as any;
+    const bookingDetail=await req('GET','/api/bookings/'+booking.id,undefined,'staff');
+    assert.equal(bookingDetail.status,200);
+    assert.equal((await bookingDetail.json() as any).id,booking.id);
+    const availability=await req('GET','/api/availability?serviceId='+service.id+'&date='+today(40));
+    assert.equal(availability.status,200);
+    assert.deepEqual((await availability.json() as any).booked,['17:00']);
+    assert.equal((await req('GET','/api/customers',undefined,'staff')).status,403);
+    assert.equal((await req('PATCH','/api/customers/'+booking.customerId,{name:'Not allowed'},'staff')).status,403);
+    const customers=await req('GET','/api/customers?search=integration%40example.com');
+    assert.equal(customers.status,200);
+    assert.equal((await customers.json() as any).total,1);
+    const customer=await req('GET','/api/customers/'+booking.customerId);
+    assert.equal(customer.status,200);
+    assert.equal((await customer.json() as any)._count.bookings,1);
+    assert.equal((await req('PATCH','/api/customers/'+booking.customerId,{email:'sophia@example.com'})).status,409);
+    assert.equal((await req('PATCH','/api/customers/'+booking.customerId,{email:'bad'})).status,400);
+    const updated=await req('PATCH','/api/customers/'+booking.customerId,{name:'Updated Customer'});
+    assert.equal(updated.status,200);
+    assert.equal((await updated.json() as any).name,'Updated Customer');
+    assert.equal((await req('GET','/api/customers/999999999')).status,404);
+    const queue=await req('GET','/api/queue');
+    assert.equal(queue.status,200);
+    const job=(await queue.json() as any).items[0];
+    assert.equal((await req('GET','/api/queue/'+job.id,undefined,'staff')).status,403);
+    const jobDetail=await req('GET','/api/queue/'+job.id);
+    assert.equal(jobDetail.status,200);
+    assert.equal((await jobDetail.json() as any).bookingId,booking.id);
+    assert.equal((await req('PATCH','/api/bookings/'+booking.id,{status:'CANCELED'})).status,200);
+    assert.equal((await req('PATCH','/api/bookings/'+booking.id,{status:'CONFIRMED'})).status,409);
+    assert.equal((await req('DELETE','/api/services/'+service.id)).status,200);
+    assert.equal((await req('GET','/api/services/'+service.id,undefined,'staff')).status,404);
+    assert.equal((await req('GET','/api/services/'+service.id)).status,200);
+    assert.equal((await req('GET','/api/dashboard')).status,200);
+    assert.equal((await fetch(origin+'/api/health')).status,200);
+  } finally { await db.onModuleDestroy(); }
+});

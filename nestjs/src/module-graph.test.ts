@@ -13,14 +13,15 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ServicesModule } from './modules/services/services.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { HealthModule } from './modules/health/health.module';
+import { CustomersModule } from './modules/customers/customers.module';
 const metadata = (module: Function, key: string): unknown[] => Reflect.getMetadata(key, module) || [];
 test('root module composes feature modules without registering their providers again', () => {
-  assert.deepEqual(metadata(AppModule,MODULE_METADATA.IMPORTS),[DatabaseModule,ServicesModule,BookingsModule,DashboardModule,QueueModule,HealthModule]);
+  assert.deepEqual(metadata(AppModule,MODULE_METADATA.IMPORTS),[DatabaseModule,ServicesModule,BookingsModule,DashboardModule,QueueModule,HealthModule,CustomersModule]);
   assert.deepEqual(metadata(AppModule,MODULE_METADATA.PROVIDERS),[]);
   assert.deepEqual(metadata(DatabaseModule,MODULE_METADATA.EXPORTS),[Database]);
   assert.deepEqual(metadata(BookingsModule,MODULE_METADATA.EXPORTS),[BookingsService]);
   assert.ok(metadata(DashboardModule,MODULE_METADATA.IMPORTS).includes(BookingsModule));
-  for (const feature of [ServicesModule,BookingsModule,DashboardModule,QueueModule]) {
+  for (const feature of [ServicesModule,BookingsModule,DashboardModule,QueueModule,CustomersModule]) {
     assert.ok(metadata(feature,MODULE_METADATA.IMPORTS).includes(AuthModule));
     assert.ok(!metadata(feature,MODULE_METADATA.PROVIDERS).includes(Database));
   }

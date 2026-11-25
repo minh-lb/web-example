@@ -33,3 +33,5 @@ CI runs five independent jobs on pull requests. The fixtures refuse to reset non
 ## Migration
 
 Stop the previous Laravel API and worker before switching (`docker compose down --remove-orphans` without `-v`). The NestJS initializer creates missing tables and seeds missing demo records; existing MySQL domain tables are retained. The Laravel internal `jobs` table is no longer used; pending domain jobs are picked up from `background_jobs`. Review any legacy PROCESSING jobs before switching. Prisma/SQLite data is not automatically migrated. Local demo secrets are not production credentials.
+
+Backend endpoint and permission reference: [NestJS API](nestjs/API.md).
