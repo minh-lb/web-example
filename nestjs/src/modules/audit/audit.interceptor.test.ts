@@ -57,3 +57,25 @@ test('slow storage does not delay responses and streaming values are preserved',
   await writer.flush();
   assert.equal(events.length,501);
 });
+
+test('audit metadata inspection never invokes business getters or breaks response', async () => {
+  const captured: AuditEvent[] = [];
+  const writer = new AuditWriter({append:async (event:AuditEvent)=>{captured.push(event);}} as unknown as AuditRepository);
+  const interceptor = new AuditInterceptor(writer);
+  let invoked = false;
+  const result = {get id(){invoked=true;throw new Error('getter');}};
+  assert.equal(await lastValueFrom(interceptor.intercept(context(),{handle:()=>of(result)})),result);
+  const proxy = new Proxy({}, {getOwnPropertyDescriptor(){throw new Error('proxy');}});
+  assert.equal(await lastValueFrom(interceptor.intercept(context(),{handle:()=>of(proxy)})),proxy);
+  await writer.flush();
+  assert.equal(invoked,false);
+  assert.equal(captured.length,2);
+  assert.ok(captured.every(event=>event.resourceId===null && event.outcome==='SUCCESS'));
+});
+test('unexpected synchronous audit enqueue failure preserves result and original exception', async () => {
+  const interceptor = new AuditInterceptor({record:()=>{throw new Error('queue failure');}} as unknown as AuditWriter);
+  const result = {id:5};
+  assert.equal(await lastValueFrom(interceptor.intercept(context(),{handle:()=>of(result)})),result);
+  const error = new HttpException('Conflict',409);
+  await assert.rejects(lastValueFrom(interceptor.intercept(context(),{handle:()=>throwError(()=>error)})),e=>e===error);
+});
