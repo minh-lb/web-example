@@ -86,3 +86,38 @@ test('service, booking, customer and queue detail contracts with role boundaries
     assert.equal((await fetch(origin+'/api/health')).status,200);
   } finally { await db.onModuleDestroy(); }
 });
+
+test('audit events track business changes and failures without request payloads', async () => {
+  const db = new Database();
+  try {
+    await reset(db);
+    assert.equal((await fetch(origin+'/api/audit-logs')).status,401);
+    assert.equal((await req('GET','/api/audit-logs',undefined,'staff')).status,403);
+    const denied = await req('POST','/api/services',{password:'not-logged'},'staff');
+    assert.equal(denied.status,403);
+    const response = await req('POST','/api/queue',{scenario:'success'});
+    assert.equal(response.status,201);
+    const job = await response.json() as any;
+    const failed = await req('PATCH','/api/queue/'+job.id,{action:'retry'});
+    assert.equal(failed.status,409);
+    const list = await req('GET','/api/audit-logs?eventSource=queue');
+    assert.equal(list.status,200);
+    const events = await list.json() as any;
+    assert.equal(events.total,2);
+    assert.equal(events.items[0].eventName,'RetryJob');
+    assert.equal(events.items[0].outcome,'FAILURE');
+    assert.equal(events.items[0].statusCode,409);
+    assert.equal(events.items[1].resourceId,job.id);
+    assert.equal(events.items[1].outcome,'SUCCESS');
+    assert.equal(events.items[1].userIdentity.email,'admin@bookly.local');
+    assert.equal((await req('GET','/api/audit-logs?outcome=INVALID')).status,400);
+    const failures = await (await req('GET','/api/audit-logs?outcome=FAILURE')).json() as any;
+    assert.equal(failures.total,2);
+    assert.ok(!JSON.stringify(failures).includes('not-logged'));
+    const processor = new QueueProcessor(db);
+    assert.equal(await processor.processNext(),true);
+    const system = await (await req('GET','/api/audit-logs?eventName=ProcessJob')).json() as any;
+    assert.equal(system.items[0].userIdentity.role,'system');
+    assert.equal(system.items[0].resourceId,job.id);
+  } finally { await db.onModuleDestroy(); }
+});

@@ -14,6 +14,7 @@ describe("AppShell", () => {
     expect(html).toContain("Dashboard");
     expect(html).not.toContain("Job queue");
     expect(html).not.toContain("Customers");
+    expect(html).not.toContain("Audit logs");
   });
   it("renders customer navigation for admins", () => {
     const html = renderToStaticMarkup(createElement(AppShell, {
@@ -21,5 +22,6 @@ describe("AppShell", () => {
       children: createElement("span", null, "Workspace"),
     }));
     expect(html).toContain('href="/customers"');
+    expect(html).toContain('href="/audit-logs"');
   });
 });

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Database } from '../../database/database.service';
+import { appendAudit } from '../audit/audit.repository';
 @Injectable()
 export class QueueProcessor {
   constructor(private readonly db: Database) {}
@@ -18,6 +19,7 @@ export class QueueProcessor {
     }else error='Unknown job type: '+job.type;
     if(error)await db.write('UPDATE background_jobs SET status=?,last_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',[attempt>=job.max_attempts?'FAILED':'PENDING',error,job.id],c);
     else await db.write('UPDATE background_jobs SET status="COMPLETED",result=?,completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,last_error=NULL WHERE id=?',[result,job.id],c);
+    await appendAudit(db,{eventSource:'queue',eventName:'ProcessJob',resourceId:Number(job.id),actor:null,outcome:error?'FAILURE':'SUCCESS',statusCode:null},c);
     return true;
   });
   }

@@ -1,3 +1,4 @@
+import { Audit } from '../audit/audit.interceptor';
 import { Body, Controller, Delete, Get, Patch, Post, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { QueueService } from './queue.service';
 import { SignatureGuard, SignedRequest } from '../auth/signature.guard';
@@ -7,6 +8,8 @@ export class QueueController {
   constructor(private readonly service: QueueService) {}
   @Get('queue') queue(@Query() q:any,@Req() r:SignedRequest){return this.service.queue(q,r.actor);}
   @Get('queue/:id') detail(@Param('id') id:string,@Req() r:SignedRequest){return this.service.detail(id,r.actor);}
+  @Audit('queue','EnqueueJob')
   @Post('queue') enqueue(@Body() b:any,@Req() r:SignedRequest){return this.service.enqueue(b||{},r.actor);}
+  @Audit('queue','RetryJob')
   @Patch('queue/:id') retry(@Param('id') id:string,@Body() b:any,@Req() r:SignedRequest){return this.service.retry(id,b||{},r.actor);}
 }
