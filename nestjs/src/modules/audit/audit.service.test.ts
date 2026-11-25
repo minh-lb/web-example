@@ -20,6 +20,6 @@ test('audit writer persists only explicitly selected metadata', async () => {
   const event = {eventSource:'bookings',eventName:'CreateBooking',resourceId:7,actor:{email:'staff@example.com',role:'staff' as const},
     outcome:'SUCCESS' as const,statusCode:201,body:{password:'secret'}};
   await appendAudit(db,event);
-  assert.deepEqual(params.slice(1),['bookings','CreateBooking',7,'staff@example.com','staff','SUCCESS',201]);
+  assert.deepEqual(params.slice(1,8),['bookings','CreateBooking',7,'staff@example.com','staff','SUCCESS',201]);
   assert.match(String(params[0]),/^[0-9a-f-]{36}$/);
 });

@@ -44,7 +44,7 @@ export function AuditLogManager() {
     </header>
     <form className="surface grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3" onSubmit={e=>{e.preventDefault();setPage(1);setFilters({...draft});}}>
       <label className="text-sm font-semibold">Event source<input className="field mt-2" list="audit-sources" value={draft.eventSource} onChange={e=>setDraft({...draft,eventSource:e.target.value})} placeholder="All sources" maxLength={64}/><datalist id="audit-sources">{["bookings","customers","services","queue"].map(s=><option key={s} value={s}/>)}</datalist></label>
-      <label className="text-sm font-semibold">Event name<input className="field mt-2" value={draft.eventName} onChange={e=>setDraft({...draft,eventName:e.target.value})} placeholder="CreateBooking" maxLength={255}/></label>
+      <label className="text-sm font-semibold">Event name<input className="field mt-2" value={draft.eventName} onChange={e=>setDraft({...draft,eventName:e.target.value})} placeholder="CreateBooking" maxLength={64}/></label>
       <label className="text-sm font-semibold">Actor email<input className="field mt-2" value={draft.actor} onChange={e=>setDraft({...draft,actor:e.target.value})} placeholder="admin@example.com" maxLength={255}/></label>
       <label className="text-sm font-semibold">Outcome<select className="field mt-2" value={draft.outcome} onChange={e=>setDraft({...draft,outcome:e.target.value})}><option value="">All outcomes</option><option value="SUCCESS">Success</option><option value="FAILURE">Failure</option></select></label>
       <label className="text-sm font-semibold">From (UTC)<input className="field mt-2" type="date" value={draft.from} max={draft.to||undefined} onChange={e=>setDraft({...draft,from:e.target.value})}/></label>

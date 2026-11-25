@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ExecutionContext, HttpException } from '@nestjs/common';
-import { lastValueFrom, of, throwError } from 'rxjs';
+import { EMPTY, lastValueFrom, of, throwError, toArray } from 'rxjs';
 import { AuditInterceptor } from './audit.interceptor';
 import { AuditWriter } from './audit.writer';
 import { AuditRepository, AuditEvent } from './audit.repository';
@@ -23,11 +23,13 @@ test('global policy recognizes existing and new authenticated mutation routes', 
 test('global interceptor preserves business results and errors even when the sink fails', async () => {
   const captured: AuditEvent[] = [];
   const repo = {append:async (event:AuditEvent)=>{captured.push(event);throw Error('audit unavailable');}} as unknown as AuditRepository;
-  const interceptor = new AuditInterceptor(new AuditWriter(repo));
+  const writer = new AuditWriter(repo);
+  const interceptor = new AuditInterceptor(writer);
   const result = {id:7,password:'not captured'};
   assert.equal(await lastValueFrom(interceptor.intercept(context(),{handle:()=>of(result)})),result);
   const error = new HttpException('Conflict',409);
   await assert.rejects(lastValueFrom(interceptor.intercept(context(),{handle:()=>throwError(()=>error)})),e=>e===error);
+  await writer.flush();
   assert.equal(captured.length,2);
   assert.equal(captured[0].resourceId,7);
   assert.equal(captured[0].outcome,'SUCCESS');
@@ -37,4 +39,21 @@ test('global interceptor preserves business results and errors even when the sin
   await lastValueFrom(interceptor.intercept(context('GET'),{handle:()=>of(result)}));
   await lastValueFrom(interceptor.intercept(context('POST','/api/bookings',null),{handle:()=>of(result)}));
   assert.equal(captured.length,2);
+});
+
+test('slow storage does not delay responses and streaming values are preserved', async () => {
+  let release!: () => void;
+  const blocked = new Promise<void>(resolve=>{release=resolve;});
+  const events: AuditEvent[] = [];
+  const repo = {append:async (event:AuditEvent)=>{events.push(event);await blocked;}} as unknown as AuditRepository;
+  const writer = new AuditWriter(repo);
+  const interceptor = new AuditInterceptor(writer);
+  try {
+    assert.deepEqual(await lastValueFrom(interceptor.intercept(context(),{handle:()=>of(1,2,3)}).pipe(toArray())),[1,2,3]);
+    assert.deepEqual(await lastValueFrom(interceptor.intercept(context(),{handle:()=>EMPTY}).pipe(toArray())),[]);
+    assert.equal(events.length,1);
+    for(let i=0;i<600;i++) writer.record({eventSource:'queue',eventName:'ProcessJob',resourceId:i+1,actor:null,outcome:'SUCCESS',statusCode:null});
+  } finally {release();}
+  await writer.flush();
+  assert.equal(events.length,501);
 });

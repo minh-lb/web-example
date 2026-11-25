@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Database, Sql } from '../../database/database.service';
+import { AuditDatabase } from './audit.database';
 import { iso } from '../../common/date-format';
 import { Input, page, string, validDate } from '../../common/validation';
 import { fail } from '../../common/http-error';
@@ -8,29 +8,31 @@ import { Actor } from '../auth/actor';
 
 export type AuditEvent = {
   eventSource: string; eventName: string; resourceId: number | null;
-  actor: Actor | null; outcome: 'SUCCESS' | 'FAILURE'; statusCode: number | null;
+  actor: Actor | null; outcome: 'SUCCESS' | 'FAILURE'; statusCode: number | null; eventTime?: Date;
 };
 
 // Explicit allowlist: never serialize request bodies, headers, tokens or error messages.
-export async function appendAudit(db: Database, event: AuditEvent, connection?: Sql) {
+export async function appendAudit(db: Pick<AuditDatabase,'write'>, event: AuditEvent) {
   await db.write(
-    'INSERT INTO audit_events (event_id,event_source,event_name,resource_id,actor_email,actor_role,outcome,status_code) VALUES (?,?,?,?,?,?,?,?)',
+    'INSERT INTO audit_events (event_id,event_source,event_name,resource_id,actor_email,actor_role,outcome,status_code,event_time) VALUES (?,?,?,?,?,?,?,?,?)',
     [randomUUID(), event.eventSource, event.eventName, event.resourceId, event.actor?.email ?? null,
-      event.actor?.role ?? 'system', event.outcome, event.statusCode], connection);
+      event.actor?.role ?? 'system', event.outcome, event.statusCode, event.eventTime ?? new Date()]);
 }
 
 @Injectable()
 export class AuditRepository {
-  constructor(private readonly db: Database) {}
+  constructor(@Inject(AuditDatabase) private readonly db: Pick<AuditDatabase,'rows'|'write'|'count'>) {}
   append(event: AuditEvent) { return appendAudit(this.db, event); }
   async list(q: Input) {
     const conditions: string[] = [], args: (string | number)[] = [];
     for (const [key, column] of [['eventSource','event_source'],['eventName','event_name'],['actor','actor_email'],['outcome','outcome']] as const) {
+      if (q[key] !== undefined && typeof q[key] !== 'string') fail(400, 'Invalid audit filter');
       const value = string(q[key]).trim();
-      if (value.length > 255) fail(400, 'Invalid audit filter');
+      if (value.length > (key === 'actor' ? 255 : 64)) fail(400, 'Invalid audit filter');
       if (key === 'outcome' && value && !['SUCCESS','FAILURE'].includes(value)) fail(400, 'Invalid outcome');
       if (value) { conditions.push(column + '=?'); args.push(value); }
     }
+    if ([q.from,q.to].some(value=>value !== undefined && typeof value !== 'string')) fail(400, 'Invalid date range');
     const from = string(q.from), to = string(q.to);
     if ((from && !validDate(from)) || (to && !validDate(to)) || (from && to && from > to)) fail(400, 'Invalid date range');
     if (from) { conditions.push('event_time>=?'); args.push(from); }

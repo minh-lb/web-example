@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '../../database/database.module';
+import { AuditDatabase } from './audit.database';
 import { AuditRepository } from './audit.repository';
 import { AuditWriter } from './audit.writer';
 
-@Module({imports:[DatabaseModule],providers:[AuditRepository,AuditWriter],exports:[AuditRepository,AuditWriter]})
+@Module({providers:[AuditDatabase,AuditRepository,AuditWriter],exports:[AuditRepository,AuditWriter]})
 export class AuditStorageModule {}

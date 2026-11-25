@@ -8,7 +8,7 @@ export class AuditedQueueRunner {
   async processNext(): Promise<boolean> {
     const event = await this.processor.processNextResult();
     if (!event) return false;
-    await this.writer.record({eventSource:'queue',eventName:'ProcessJob',resourceId:event.jobId,
+    this.writer.record({eventSource:'queue',eventName:'ProcessJob',resourceId:event.jobId,
       actor:null,outcome:event.success?'SUCCESS':'FAILURE',statusCode:null});
     return true;
   }

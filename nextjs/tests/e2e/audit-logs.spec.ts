@@ -6,6 +6,12 @@ test("admin can inspect and filter persisted audit events", async ({page}) => {
   const created = await page.request.post("/api/queue",{data:{scenario:"success"}});
   expect(created.status()).toBe(201);
   const job = await created.json();
+  await expect.poll(async()=>{
+    const response = await page.request.get('/api/audit-logs?eventName=EnqueueJob');
+    if (!response.ok()) return false;
+    const data = await response.json();
+    return data.items.some((event:{resourceId:number})=>event.resourceId===job.id);
+  }).toBe(true);
   await page.getByRole("link",{name:"Audit logs"}).click();
   await expect(page).toHaveURL(/\/audit-logs/);
   await page.getByLabel("Event name").fill("EnqueueJob");
