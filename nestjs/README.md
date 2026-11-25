@@ -1,10 +1,24 @@
 # NestJS backend
 
-Build with `npm install && npm run build` or `docker compose build nestjs`. Run `node dist/main.js` for the API, `node dist/worker.js` for the independent worker. The API initializes the MySQL schema and seeds missing demo records. Redis caches service lists with versioned invalidation and TTL.
+Feature modules follow the [official NestJS modules guide](https://docs.nestjs.com/modules). Each business feature owns its controller, service, repository and policies where applicable. Modules import only required dependencies and export only public providers.
 
-- `src/domain`: validation, booking transitions, queue scenarios
-- `src/application`: orchestration and role checks
-- `src/infrastructure`: SQL repositories, cache and schema
-- `src/http`: NestJS controllers and HMAC guard
+```text
+src/
+  app.module.ts
+  main.ts
+  worker.module.ts
+  worker.ts
+  common/              Shared validation, HTTP errors, date formatting
+  database/            Shared MySQL/Redis provider and schema
+  modules/
+    auth/              Signed requests and actor/role checks
+    services/          Service catalog
+    bookings/          Bookings and availability
+    dashboard/         Read-only dashboard
+    queue/             Queue API, retry policy and processor
+    health/            Public readiness endpoint
+```
 
-The worker locks a pending job and commits its state atomically. Retry delays are one and two seconds; failed jobs can be manually retried. Simulated confirmations have no external side effects. Existing Laravel domain tables are compatible; legacy queue transport is not used. Test fixture commands reject non-test databases.
+DashboardModule imports BookingsModule and consumes its exported BookingsService; repositories stay private. DatabaseModule exports one Database provider per application context. Booking creation deliberately writes the confirmation job in the same MySQL transaction, preserving atomicity. The separate worker uses NestFactory.createApplicationContext(WorkerModule) without HTTP controllers. No global modules or circular dependencies.
+
+Build: `npm install && npm run build` or `docker compose build nestjs`. API: `node dist/main.js`. Worker: `node dist/worker.js`. Unit tests: `npm run test:unit` after build. The API initializes MySQL and seeds missing fixtures. Redis caches service lists. Tests reset only databases ending in _test. Existing HTTP contracts and queue behavior remain unchanged.

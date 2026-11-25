@@ -1,8 +1,9 @@
 import { CanActivate, ExecutionContext, Injectable, RawBodyRequest } from '@nestjs/common';
 import { createHash,createHmac,timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
-import { Actor } from '../application/booking.service';
-import { emailValid,fail } from '../domain/policy';
+import { Actor } from './actor';
+import { emailValid } from '../../common/validation';
+import { fail } from '../../common/http-error';
 
 export type SignedRequest = RawBodyRequest<Request> & { actor:Actor };
 export function signature(secret:string,timestamp:string,method:string,path:string,body:Buffer|string,email:string,role:string) {

@@ -7,7 +7,7 @@
     "start": "node dist/main.js",
     "worker": "node dist/worker.js",
     "fixtures": "node dist/fixtures.js",
-    "test:unit": "node --test dist/domain/*.test.js",
+    "test:unit": "node --test dist/module-graph.test.js dist/modules/*/*.test.js",
     "test:integration": "node --test dist/integration.test.js"
   },
   "dependencies": {

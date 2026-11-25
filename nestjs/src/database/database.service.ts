@@ -11,6 +11,7 @@ export class Database implements OnModuleDestroy {
   constructor() { this.redis.on('error', error => console.error('Redis:',error.message)); }
   async rows(sql:string, params:any[] = [], conn:Sql = this.pool): Promise<Row[]> { const [rows] = await conn.query<Row[]>(sql,params); return rows; }
   async write(sql:string, params:any[] = [], conn:Sql = this.pool): Promise<ResultSetHeader> { const [result] = await conn.query<ResultSetHeader>(sql,params); return result; }
+  async count(sql:string,args:any[]=[],c?:Sql):Promise<number> { return Number((await this.rows(sql,args,c))[0].total); }
   async transaction<T>(run:(conn:PoolConnection)=>Promise<T>):Promise<T> {
     const conn = await this.pool.getConnection();
     try { await conn.beginTransaction(); const result = await run(conn); await conn.commit(); return result; }

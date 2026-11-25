@@ -1,8 +1,8 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { Database } from './infrastructure/database';
-import { initialize } from './infrastructure/schema';
+import { Database } from './database/database.service';
+import { initialize } from './database/schema';
 export async function bootstrap(){
   const app=await NestFactory.create(AppModule,{rawBody:true});
   app.enableShutdownHooks();

@@ -1,5 +1,5 @@
-import { Database } from './database';
-import { today } from '../domain/policy';
+import { Database } from './database.service';
+import { today } from '../common/validation';
 
 const timestamps = 'created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP';
 const schema = [

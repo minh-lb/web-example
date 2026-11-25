@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
-import { Database } from './infrastructure/database';
-import { assertTestDatabase,reset } from './infrastructure/schema';
+import { Database } from './database/database.service';
+import { assertTestDatabase,reset } from './database/schema';
 async function main(){
   assertTestDatabase();const db=new Database();
   try{

@@ -1,11 +1,11 @@
 import 'reflect-metadata';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Database } from './infrastructure/database';
-import { reset } from './infrastructure/schema';
-import { signature } from './http/signature.guard';
-import { today } from './domain/policy';
-import { processNext } from './worker';
+import { Database } from './database/database.service';
+import { reset } from './database/schema';
+import { signature } from './modules/auth/signature.guard';
+import { today } from './common/validation';
+import { QueueProcessor } from './modules/queue/queue.processor';
 const origin=process.env.TEST_API_URL||'http://127.0.0.1:8000';
 const secret=process.env.INTERNAL_API_SECRET||'';
 async function req(method:string,path:string,body?:unknown,role='admin'){
@@ -14,6 +14,7 @@ async function req(method:string,path:string,body?:unknown,role='admin'){
 }
 test('signed API, authorization, persistence, duplicate conflict and worker retry',async()=>{
   const db=new Database();
+  const processor = new QueueProcessor(db);
   try{
     await reset(db);
     assert.equal((await fetch(origin+'/api/services')).status,401);
@@ -25,11 +26,11 @@ test('signed API, authorization, persistence, duplicate conflict and worker retr
     const pair=await Promise.all([req('POST','/api/bookings',payload),req('POST','/api/bookings',payload)]);
     assert.deepEqual(pair.map(r=>r.status).sort(),[201,409]);
     const queue=await req('GET','/api/queue');const {items:jobs}=await queue.json() as any;assert.equal(jobs.length,1);
-    assert.equal(await processNext(db),true);assert.equal((await db.rows('SELECT status FROM background_jobs'))[0].status,'COMPLETED');
+    assert.equal(await processor.processNext(),true);assert.equal((await db.rows('SELECT status FROM background_jobs'))[0].status,'COMPLETED');
     const demo=await req('POST','/api/queue',{scenario:'fail'});assert.equal(demo.status,201);const job=await demo.json() as any;
-    for(let i=0;i<3;i++){await db.write('UPDATE background_jobs SET updated_at=DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 3 SECOND) WHERE id=?',[job.id]);assert.equal(await processNext(db),true);}
+    for(let i=0;i<3;i++){await db.write('UPDATE background_jobs SET updated_at=DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 3 SECOND) WHERE id=?',[job.id]);assert.equal(await processor.processNext(),true);}
     assert.equal((await db.rows('SELECT status FROM background_jobs WHERE id=?',[job.id]))[0].status,'FAILED');
-    assert.equal((await req('PATCH','/api/queue/'+job.id,{action:'retry'})).status,200);await processNext(db);
+    assert.equal((await req('PATCH','/api/queue/'+job.id,{action:'retry'})).status,200);await processor.processNext();
     assert.equal((await db.rows('SELECT status FROM background_jobs WHERE id=?',[job.id]))[0].status,'COMPLETED');
   }finally{await db.onModuleDestroy();}
 });
