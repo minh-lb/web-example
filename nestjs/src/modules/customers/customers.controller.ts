@@ -1,4 +1,3 @@
-import { Audit } from '../audit/audit.interceptor';
 import { Body, Controller, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
 import { SignatureGuard, SignedRequest } from '../auth/signature.guard';
 import { CustomersService } from './customers.service';
@@ -13,7 +12,6 @@ export class CustomersController {
   @Get(':id') detail(@Param('id') id: string, @Req() req: SignedRequest) {
     return this.service.detail(id, req.actor);
   }
-  @Audit('customers','UpdateCustomer')
   @Patch(':id') update(@Param('id') id: string, @Body() body: unknown, @Req() req: SignedRequest) {
     return this.service.update(id, body, req.actor);
   }

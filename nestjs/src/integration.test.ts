@@ -6,6 +6,9 @@ import { reset } from './database/schema';
 import { signature } from './modules/auth/signature.guard';
 import { today } from './common/validation';
 import { QueueProcessor } from './modules/queue/queue.processor';
+import { AuditRepository } from './modules/audit/audit.repository';
+import { AuditWriter } from './modules/audit/audit.writer';
+import { AuditedQueueRunner } from './modules/audit/audited-queue-runner';
 const origin=process.env.TEST_API_URL||'http://127.0.0.1:8000';
 const secret=process.env.INTERNAL_API_SECRET||'';
 async function req(method:string,path:string,body?:unknown,role='admin'){
@@ -114,10 +117,29 @@ test('audit events track business changes and failures without request payloads'
     const failures = await (await req('GET','/api/audit-logs?outcome=FAILURE')).json() as any;
     assert.equal(failures.total,2);
     assert.ok(!JSON.stringify(failures).includes('not-logged'));
-    const processor = new QueueProcessor(db);
-    assert.equal(await processor.processNext(),true);
+    const runner = new AuditedQueueRunner(new QueueProcessor(db), new AuditWriter(new AuditRepository(db)));
+    assert.equal(await runner.processNext(),true);
     const system = await (await req('GET','/api/audit-logs?eventName=ProcessJob')).json() as any;
     assert.equal(system.items[0].userIdentity.role,'system');
     assert.equal(system.items[0].resourceId,job.id);
+  } finally { await db.onModuleDestroy(); }
+});
+
+test('business mutation still succeeds if audit insert fails', async () => {
+  const db = new Database();
+  try {
+    await reset(db);
+    // Isolated test database only; force failure of the audit sink without touching business tables.
+    await db.write('RENAME TABLE audit_events TO audit_events_unavailable');
+    try {
+      const created = await req('POST','/api/queue',{scenario:'success'});
+      assert.equal(created.status,201);
+      const job = await created.json() as any;
+      assert.equal((await db.rows('SELECT status FROM background_jobs WHERE id=?',[job.id]))[0].status,'PENDING');
+      assert.equal((await req('PATCH','/api/queue/'+job.id,{action:'retry'})).status,409);
+      const runner = new AuditedQueueRunner(new QueueProcessor(db), new AuditWriter(new AuditRepository(db)));
+      assert.equal(await runner.processNext(),true);
+      assert.equal((await db.rows('SELECT status FROM background_jobs WHERE id=?',[job.id]))[0].status,'COMPLETED');
+    } finally { await db.write('RENAME TABLE audit_events_unavailable TO audit_events'); }
   } finally { await db.onModuleDestroy(); }
 });
