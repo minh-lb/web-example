@@ -17,10 +17,20 @@ test("admin can inspect and filter persisted audit events", async ({page}) => {
   await page.getByLabel("Event name").fill("EnqueueJob");
   await page.getByLabel("Outcome").selectOption("SUCCESS");
   await page.getByRole("button",{name:"Apply filters"}).click();
-  const row = page.getByRole("row").filter({hasText:"EnqueueJob"}).filter({has:page.getByRole("cell",{name:String(job.id),exact:true})});
-  await expect(row).toHaveCount(1);
-  await row.getByRole("button",{name:/View event/}).click();
-  await expect(page.getByRole("region",{name:"Event details"})).toContainText('"eventName": "EnqueueJob"');
+  const message = `Queued job #${job.id}`;
+  const row = page.getByRole("row").filter({has:page.getByText(message,{exact:true})});
+  await expect(row.getByRole("cell",{name:/^success$/i})).toBeVisible();
+  const view = row.getByRole("button",{name:`View event details: ${message}`});
+  await view.click();
+  const dialog = page.getByRole("dialog",{name:"Event details"});
+  await expect(dialog.getByText(message,{exact:true})).toBeVisible();
+  await expect(dialog.getByText("EnqueueJob",{exact:true})).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(view).toBeFocused();
+  await view.click();
+  await dialog.getByRole("button",{name:"Close",exact:true}).click();
+  await expect(dialog).toBeHidden();
 });
 test("staff cannot access the audit page or API",async ({page})=>{
   await loginAs(page,"staff");
