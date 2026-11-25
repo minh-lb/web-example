@@ -1,8 +1,6 @@
 name: Web Example CI
 
 on:
-  push:
-    branches: [main, refactor-structure]
   pull_request:
 
 jobs:
@@ -44,37 +42,31 @@ jobs:
           AUTH_KEYCLOAK_ID: mini-booking
           AUTH_KEYCLOAK_SECRET: mini-booking-local-secret
           AUTH_KEYCLOAK_ISSUER: http://localhost:8080/idp/realms/mini-booking
-          BACKEND_INTERNAL_URL: http://laravel
+          BACKEND_INTERNAL_URL: http://nestjs:8000
           INTERNAL_API_SECRET: local-booking-shared-secret-change-before-sharing
         run: npm run build
 
-  laravel-unit:
-    name: Laravel domain unit tests
+  nestjs-unit:
+    name: NestJS domain unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build Laravel image
-        run: docker compose build laravel
-      - name: Run domain tests
-        run: docker run --rm web-example-laravel:local php artisan test --testsuite=Unit
+      - run: docker compose build nestjs
+      - run: docker run --rm web-example-nestjs:local npm run test:unit
 
-  laravel-feature:
-    name: Laravel feature tests on MySQL and Redis
+  nestjs-integration:
+    name: NestJS integration tests on MySQL and Redis
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       DB_DATABASE: web_example_test
     steps:
       - uses: actions/checkout@v4
-      - name: Start MySQL, Redis and FrankenPHP
-        run: docker compose up -d --build laravel
-      - name: Run feature tests
-        run: docker compose exec -T laravel php artisan test --testsuite=Feature
-      - name: Debug on failure
-        if: failure()
-        run: docker compose logs --tail=150 mysql redis laravel
-      - name: Stop services
-        if: always()
+      - run: docker compose up -d --build --wait nestjs
+      - run: docker compose exec -T nestjs npm run test:integration
+      - if: failure()
+        run: docker compose logs --tail=150 mysql redis nestjs
+      - if: always()
         run: docker compose down -v
 
   playwright:
@@ -102,7 +94,7 @@ jobs:
             if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then exit 0; fi
             sleep 2
           done
-          docker compose logs --tail=150 laravel nextjs
+          docker compose logs --tail=150 nestjs nextjs
           exit 1
       - name: HTTP smoke
         run: cd nextjs && npm run test:smoke
@@ -118,15 +110,15 @@ jobs:
   required:
     name: All tests
     runs-on: ubuntu-latest
-    needs: [nextjs-unit, nextjs-build, laravel-unit, laravel-feature, playwright]
+    needs: [nextjs-unit, nextjs-build, nestjs-unit, nestjs-integration, playwright]
     if: always()
     steps:
       - name: Verify all test jobs succeeded
         env:
           UNIT: ${{ needs.nextjs-unit.result }}
           BUILD: ${{ needs.nextjs-build.result }}
-          DOMAIN: ${{ needs.laravel-unit.result }}
-          FEATURE: ${{ needs.laravel-feature.result }}
+          DOMAIN: ${{ needs.nestjs-unit.result }}
+          FEATURE: ${{ needs.nestjs-integration.result }}
           E2E: ${{ needs.playwright.result }}
         run: |
           test "$UNIT" = success

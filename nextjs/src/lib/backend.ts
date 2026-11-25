@@ -3,7 +3,7 @@ import type { AppRole } from "./roles";
 
 export type Actor = { email: string; name: string; role: AppRole };
 
-const backendOrigin = process.env.BACKEND_INTERNAL_URL || "http://laravel";
+const backendOrigin = process.env.BACKEND_INTERNAL_URL || "http://nestjs:8000";
 const secret = process.env.INTERNAL_API_SECRET || "";
 
 export async function requestBackend(
@@ -16,8 +16,7 @@ export async function requestBackend(
   if (!path.startsWith("/api/")) throw new Error("Invalid internal API path");
   if (!secret || secret.length < 24) throw new Error("INTERNAL_API_SECRET must contain at least 24 characters");
   const url = new URL(path, backendOrigin);
-  // Symfony normalizes query strings using RFC3986 (%20 for spaces),
-  // while URLSearchParams encodes spaces as '+'. Canonicalize before signing.
+  // Sign the exact encoded request path and query sent to NestJS.
   const encode = (value: string) => encodeURIComponent(value).replace(/[!'()*]/g,
     (character) => "%" + character.charCodeAt(0).toString(16).toUpperCase());
   const pairs = [...url.searchParams.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);

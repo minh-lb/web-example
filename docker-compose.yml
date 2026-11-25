@@ -45,84 +45,46 @@ services:
       - keycloak-data:/opt/keycloak/data
       - ./nextjs/keycloak:/opt/keycloak/data/import:ro
 
-  laravel:
-    build: ./laravel
-    image: web-example-laravel:local
+  nestjs:
+    build: ./nestjs
+    image: web-example-nestjs:local
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
-      APP_NAME: Bookly
-      APP_ENV: local
-      APP_KEY: 0123456789abcdef0123456789abcdef
-      APP_DEBUG: "true"
-      APP_URL: http://localhost:8000
-      DB_CONNECTION: mysql
+    environment: &backend-env
       DB_HOST: mysql
       DB_PORT: "3306"
       DB_DATABASE: ${DB_DATABASE:-web_example}
       DB_USERNAME: web_example
       DB_PASSWORD: ${DB_PASSWORD:-local-web-example-password}
-      REDIS_CLIENT: phpredis
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      QUEUE_CONNECTION: database
-      CACHE_STORE: redis
-      SESSION_DRIVER: file
-      LOG_CHANNEL: stderr
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-booking-shared-secret-change-before-sharing}
-      SERVER_NAME: ":80"
-    volumes:
-      - laravel-storage:/app/storage
     ports:
-      - "127.0.0.1:8000:80"
-    command:
-      - sh
-      - -lc
-      - >-
-        php artisan migrate --force &&
-        php artisan db:seed --force &&
-        exec frankenphp run --config /etc/frankenphp/Caddyfile --adapter caddyfile
+      - "127.0.0.1:8000:8000"
     healthcheck:
-      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/api/health') === false ? 1 : 0);"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 5s
+      timeout: 3s
       retries: 30
-      start_period: 20s
+      start_period: 10s
 
   queue-worker:
-    image: web-example-laravel:local
-    build: ./laravel
+    image: web-example-nestjs:local
+    build: ./nestjs
     depends_on:
-      laravel:
+      nestjs:
         condition: service_healthy
-    environment:
-      APP_NAME: Bookly
-      APP_ENV: local
-      APP_KEY: 0123456789abcdef0123456789abcdef
-      DB_CONNECTION: mysql
-      DB_HOST: mysql
-      DB_PORT: "3306"
-      DB_DATABASE: ${DB_DATABASE:-web_example}
-      DB_USERNAME: web_example
-      DB_PASSWORD: ${DB_PASSWORD:-local-web-example-password}
-      REDIS_CLIENT: phpredis
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      QUEUE_CONNECTION: database
-      CACHE_STORE: redis
-      SESSION_DRIVER: file
-      LOG_CHANNEL: stderr
-    volumes:
-      - laravel-storage:/app/storage
-    command: ["php", "artisan", "queue:work", "database", "--queue=default", "--sleep=1", "--tries=3", "--timeout=30"]
+    environment: *backend-env
+    command: ["node", "dist/worker.js"]
 
   nextjs:
     image: web-example-nextjs:local
     build: ./nextjs
     depends_on:
-      laravel:
+      nestjs:
         condition: service_healthy
       keycloak:
         condition: service_started
@@ -136,7 +98,7 @@ services:
       AUTH_KEYCLOAK_SECRET: mini-booking-local-secret
       AUTH_KEYCLOAK_ISSUER: http://localhost:8080/idp/realms/mini-booking
       AUTH_KEYCLOAK_INTERNAL_ORIGIN: http://keycloak:8080
-      BACKEND_INTERNAL_URL: http://laravel
+      BACKEND_INTERNAL_URL: http://nestjs:8000
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-booking-shared-secret-change-before-sharing}
     volumes:
       - ./nextjs:/app
@@ -147,6 +109,5 @@ volumes:
   mysql-data:
   redis-data:
   keycloak-data:
-  laravel-storage:
   nextjs-node-modules:
   nextjs-cache:

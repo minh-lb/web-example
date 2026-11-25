@@ -1,43 +1,35 @@
 # web-example
 
-A local Playwright learning project built as a single monorepo.
+Local Playwright learning monorepo.
 
-```text
-web-example/
-├── nextjs/                  Next.js frontend, Keycloak BFF, Playwright, component tests
-├── laravel/                 Laravel API, DDD layers and persistent background queue
-├── docker-compose.yml       Next.js, FrankenPHP, MySQL, Redis, queue worker, Keycloak
-└── .github/workflows/       Parallel CI
-```
-
-Start the local stack:
+- `nextjs/`: Next.js frontend, Keycloak BFF and Playwright.
+- `nestjs/`: NestJS REST API, domain policies, application services, MySQL repositories and independent database queue worker.
+- `docker-compose.yml`: MySQL 8.4, Redis 7.4, NestJS, worker, Next.js and Keycloak.
 
 ```sh
 docker compose up -d --build
 docker compose ps
 ```
 
-- UI: http://localhost:3000
-- Backend health: http://localhost:8000/api/health
-- Keycloak: http://localhost:8080/idp
-- Job queue dashboard: http://localhost:3000/queue (admin only)
+UI: http://localhost:3000 · API health: http://localhost:8000/api/health · Keycloak: http://localhost:8080/idp
 
 Local demo credentials: admin / Admin123!, staff / Staff123!.
 
-**Data storage:** MySQL 8.4 (`mysql-data` Docker volume). **Cache:** Redis 7.4 (`redis-data`). **Queue:** Laravel database queue in MySQL, processed by an independent `queue-worker`. Next.js uses NextAuth/Keycloak and signs internal Laravel calls; no browser-held backend credential.
+Next.js signs server-to-server API requests with HMAC; Redis caches service lists; MySQL stores bookings and durable job state. Jobs and bookings commit in the same transaction. Worker retries use MySQL row locks. No real emails are sent.
+
+## Tests
 
 ```sh
-cd nextjs && npm ci && npm run test:unit && npm run typecheck
-cd ..
+docker compose build nestjs
+docker run --rm web-example-nestjs:local npm run test:unit
+DB_DATABASE=web_example_test docker compose up -d --build --wait nestjs
+DB_DATABASE=web_example_test docker compose exec -T nestjs npm run test:integration
 DB_DATABASE=web_example_test docker compose up -d --build
-docker compose exec -T laravel php artisan test
-cd nextjs && npm run test:e2e
+cd nextjs && npm ci && npm run test:unit && npm run typecheck && npm run test:e2e
 ```
 
-Playwright global setup is guarded to run only against a database ending in `_test`, and resets seeded test fixtures after stopping the worker. The CI workflow separates Next.js unit/component, Next.js build, Laravel unit, Laravel feature and Playwright tests across independent concurrent jobs.
+CI runs five independent jobs on pull requests. The fixtures refuse to reset non-test databases.
 
-**Migration note:** old Prisma/SQLite data is not automatically migrated. Use an explicit export/import if you need those records. This stack is configured for local development, not production security. Configure secrets before sharing.
+## Migration
 
-## Repository rename
-
-The GitHub repository is currently named `playwright-example`. To rename it to `web-example`, use **GitHub → Settings → General → Repository name**. The GitHub connector available in this session does not offer a rename operation.
+Stop the previous Laravel API and worker before switching (`docker compose down --remove-orphans` without `-v`). The NestJS initializer creates missing tables and seeds missing demo records; existing MySQL domain tables are retained. The Laravel internal `jobs` table is no longer used; pending domain jobs are picked up from `background_jobs`. Review any legacy PROCESSING jobs before switching. Prisma/SQLite data is not automatically migrated. Local demo secrets are not production credentials.

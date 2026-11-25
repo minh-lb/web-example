@@ -25,7 +25,7 @@ export default async function globalSetup() {
     }
     await pause(500);
   }
-  if (!healthReady) throw new Error("Next.js/Laravel health is unavailable.");
+  if (!healthReady) throw new Error("Next.js/NestJS health is unavailable.");
 
   let oidcReady = false;
   for (let attempt = 0; attempt < 120; attempt++) {
@@ -46,7 +46,7 @@ export default async function globalSetup() {
 
   compose("stop", "queue-worker");
   try {
-    compose("exec", "-T", "laravel", "php", "artisan", "booking:reset-demo");
+    compose("exec", "-T", "nestjs", "node", "dist/fixtures.js", "reset");
   } finally {
     compose("start", "queue-worker");
   }

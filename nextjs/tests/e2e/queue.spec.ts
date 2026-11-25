@@ -8,8 +8,8 @@ function queueFixture(args: string[]): string {
   const action = args[0];
   const options = action === "cleanup" ? [`--ids=${args.slice(1).join(",")}`] : [];
   return execFileSync("docker", [
-    "compose", "-f", "docker-compose.yml", "exec", "-T", "laravel",
-    "php", "artisan", "booking:queue-fixtures", action, ...options,
+    "compose", "-f", "docker-compose.yml", "exec", "-T", "nestjs",
+    "node", "dist/fixtures.js", "queue", action, ...options,
   ], {
     cwd: path.resolve(process.cwd(), ".."),
     encoding: "utf8",
@@ -100,8 +100,7 @@ test("exhausted job can be manually retried in the admin dashboard", async ({ pa
 
 test("admin can find and retry failed jobs beyond the first 100 rows", async ({ page }) => {
   await loginAs(page, "admin");
-  // Spawn a tsx process to create SQLite fixtures; importing the generated
-  // Prisma Client directly into Playwright's test transpiler is unsupported.
+  // Create isolated MySQL fixtures through the NestJS backend CLI.
   const fixtureIds = JSON.parse(queueFixture(["seed"])) as number[];
   const oldest = fixtureIds[0];
   try {
