@@ -20,7 +20,7 @@ type BookingList = {
 
 async function expectDashboardStat(page: Page, label: string, value: number) {
   const formattedValue = String(value).padStart(2, "0");
-  const card = page.getByText(label, { exact: true }).locator("..");
+  const card = page.getByRole("main").getByText(label, { exact: true }).locator("..");
   await expect(card).toContainText(formattedValue);
 }
 
