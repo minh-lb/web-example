@@ -37,6 +37,6 @@ export async function seed(db:Database) {
 export function assertTestDatabase() { if (!process.env.DB_DATABASE?.endsWith('_test')) throw new Error('Refusing to modify fixtures outside an isolated _test database'); }
 export async function reset(db:Database) {
   assertTestDatabase();
-  await db.transaction(async c => { for (const table of ['background_jobs','bookings','customers','services']) await db.write('DELETE FROM '+table,[],c); });
+  await db.transaction(async c => { for (const table of ['audit_events','background_jobs','bookings','customers','services']) await db.write('DELETE FROM '+table,[],c); });
   await seed(db);
 }

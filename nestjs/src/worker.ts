@@ -2,10 +2,10 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { WorkerModule } from './worker.module';
-import { QueueProcessor } from './modules/queue/queue.processor';
+import { AuditedQueueRunner } from './modules/audit/audited-queue-runner';
 async function main() {
   const app = await NestFactory.createApplicationContext(WorkerModule);
-  const processor = app.get(QueueProcessor);
+  const processor = app.get(AuditedQueueRunner);
   let running = true;
   process.once('SIGTERM', () => { running = false; });
   process.once('SIGINT', () => { running = false; });

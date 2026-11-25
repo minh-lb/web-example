@@ -14,17 +14,19 @@ import { ServicesModule } from './modules/services/services.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { HealthModule } from './modules/health/health.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuditStorageModule } from './modules/audit/audit-storage.module';
 const metadata = (module: Function, key: string): unknown[] => Reflect.getMetadata(key, module) || [];
 test('root module composes feature modules without registering their providers again', () => {
-  assert.deepEqual(metadata(AppModule,MODULE_METADATA.IMPORTS),[DatabaseModule,ServicesModule,BookingsModule,DashboardModule,QueueModule,HealthModule,CustomersModule]);
+  assert.deepEqual(metadata(AppModule,MODULE_METADATA.IMPORTS),[DatabaseModule,ServicesModule,BookingsModule,DashboardModule,QueueModule,HealthModule,CustomersModule,AuditModule]);
   assert.deepEqual(metadata(AppModule,MODULE_METADATA.PROVIDERS),[]);
   assert.deepEqual(metadata(DatabaseModule,MODULE_METADATA.EXPORTS),[Database]);
   assert.deepEqual(metadata(BookingsModule,MODULE_METADATA.EXPORTS),[BookingsService]);
   assert.ok(metadata(DashboardModule,MODULE_METADATA.IMPORTS).includes(BookingsModule));
-  for (const feature of [ServicesModule,BookingsModule,DashboardModule,QueueModule,CustomersModule]) {
+  for (const feature of [ServicesModule,BookingsModule,DashboardModule,QueueModule,CustomersModule,AuditModule]) {
     assert.ok(metadata(feature,MODULE_METADATA.IMPORTS).includes(AuthModule));
     assert.ok(!metadata(feature,MODULE_METADATA.PROVIDERS).includes(Database));
   }
-  assert.deepEqual(metadata(WorkerModule,MODULE_METADATA.IMPORTS),[DatabaseModule]);
+  assert.deepEqual(metadata(WorkerModule,MODULE_METADATA.IMPORTS),[DatabaseModule,AuditStorageModule]);
   assert.deepEqual(metadata(WorkerModule,MODULE_METADATA.CONTROLLERS),[]);
 });

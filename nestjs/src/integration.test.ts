@@ -6,8 +6,18 @@ import { reset } from './database/schema';
 import { signature } from './modules/auth/signature.guard';
 import { today } from './common/validation';
 import { QueueProcessor } from './modules/queue/queue.processor';
+import { AuditRepository } from './modules/audit/audit.repository';
+import { AuditWriter } from './modules/audit/audit.writer';
+import { AuditedQueueRunner } from './modules/audit/audited-queue-runner';
 const origin=process.env.TEST_API_URL||'http://127.0.0.1:8000';
 const secret=process.env.INTERNAL_API_SECRET||'';
+async function waitForAudit(db:Database, eventName:string, resourceId:number, outcome='SUCCESS') {
+  for (let i=0;i<100;i++) {
+    if ((await db.rows('SELECT id FROM audit_events WHERE event_name=? AND resource_id=? AND outcome=?',[eventName,resourceId,outcome])).length) return;
+    await new Promise(resolve=>setTimeout(resolve,50));
+  }
+  assert.fail('Audit event not persisted: '+eventName+' '+resourceId+' '+outcome);
+}
 async function req(method:string,path:string,body?:unknown,role='admin'){
   const text=body===undefined?'':JSON.stringify(body),ts=String(Math.floor(Date.now()/1000)),email=role+'@bookly.local';
   return fetch(origin+path,{method,headers:{'Content-Type':'application/json','X-Frontend-Timestamp':ts,'X-Frontend-Identity':email,'X-Frontend-Role':role,'X-Frontend-Signature':signature(secret,ts,method,path,text,email,role)},...(body===undefined?{}:{body:text})});
@@ -32,6 +42,7 @@ test('signed API, authorization, persistence, duplicate conflict and worker retr
     assert.equal((await db.rows('SELECT status FROM background_jobs WHERE id=?',[job.id]))[0].status,'FAILED');
     assert.equal((await req('PATCH','/api/queue/'+job.id,{action:'retry'})).status,200);await processor.processNext();
     assert.equal((await db.rows('SELECT status FROM background_jobs WHERE id=?',[job.id]))[0].status,'COMPLETED');
+    await waitForAudit(db,'RetryJob',job.id);
   }finally{await db.onModuleDestroy();}
 });
 
@@ -84,5 +95,65 @@ test('service, booking, customer and queue detail contracts with role boundaries
     assert.equal((await req('GET','/api/services/'+service.id)).status,200);
     assert.equal((await req('GET','/api/dashboard')).status,200);
     assert.equal((await fetch(origin+'/api/health')).status,200);
+    await waitForAudit(db,'ArchiveService',service.id);
+  } finally { await db.onModuleDestroy(); }
+});
+
+test('audit events track business changes and failures without request payloads', async () => {
+  const db = new Database();
+  try {
+    await reset(db);
+    assert.equal((await fetch(origin+'/api/audit-logs')).status,401);
+    assert.equal((await req('GET','/api/audit-logs',undefined,'staff')).status,403);
+    const denied = await req('POST','/api/services',{password:'not-logged'},'staff');
+    assert.equal(denied.status,403);
+    const response = await req('POST','/api/queue',{scenario:'success'});
+    assert.equal(response.status,201);
+    const job = await response.json() as any;
+    const failed = await req('PATCH','/api/queue/'+job.id,{action:'retry'});
+    assert.equal(failed.status,409);
+    await waitForAudit(db,'RetryJob',job.id,'FAILURE');
+    const list = await req('GET','/api/audit-logs?eventSource=queue');
+    assert.equal(list.status,200);
+    const events = await list.json() as any;
+    assert.equal(events.total,2);
+    assert.equal(events.items[0].eventName,'RetryJob');
+    assert.equal(events.items[0].outcome,'FAILURE');
+    assert.equal(events.items[0].statusCode,409);
+    assert.equal(events.items[1].resourceId,job.id);
+    assert.equal(events.items[1].outcome,'SUCCESS');
+    assert.equal(events.items[1].userIdentity.email,'admin@bookly.local');
+    assert.equal((await req('GET','/api/audit-logs?outcome=INVALID')).status,400);
+    const failures = await (await req('GET','/api/audit-logs?outcome=FAILURE')).json() as any;
+    assert.equal(failures.total,2);
+    assert.ok(!JSON.stringify(failures).includes('not-logged'));
+    const writer = new AuditWriter(new AuditRepository(db));
+    const runner = new AuditedQueueRunner(new QueueProcessor(db), writer);
+    assert.equal(await runner.processNext(),true);
+    await writer.flush();
+    const system = await (await req('GET','/api/audit-logs?eventName=ProcessJob')).json() as any;
+    assert.equal(system.items[0].userIdentity.role,'system');
+    assert.equal(system.items[0].resourceId,job.id);
+  } finally { await db.onModuleDestroy(); }
+});
+
+test('business mutation still succeeds if audit insert fails', async () => {
+  const db = new Database();
+  try {
+    await reset(db);
+    // Isolated test database only; force failure of the audit sink without touching business tables.
+    await db.write('RENAME TABLE audit_events TO audit_events_unavailable');
+    try {
+      const created = await req('POST','/api/queue',{scenario:'success'});
+      assert.equal(created.status,201);
+      const job = await created.json() as any;
+      assert.equal((await db.rows('SELECT status FROM background_jobs WHERE id=?',[job.id]))[0].status,'PENDING');
+      assert.equal((await req('PATCH','/api/queue/'+job.id,{action:'retry'})).status,409);
+      const writer = new AuditWriter(new AuditRepository(db));
+      const runner = new AuditedQueueRunner(new QueueProcessor(db), writer);
+      assert.equal(await runner.processNext(),true);
+      assert.equal((await db.rows('SELECT status FROM background_jobs WHERE id=?',[job.id]))[0].status,'COMPLETED');
+      await writer.flush();
+    } finally { await db.write('RENAME TABLE audit_events_unavailable TO audit_events'); }
   } finally { await db.onModuleDestroy(); }
 });

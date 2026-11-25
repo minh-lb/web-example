@@ -37,4 +37,4 @@ async function proxy(request: Request, context: Context) {
   }
 }
 
-export { proxy as GET, proxy as POST, proxy as PATCH, proxy as DELETE };
+export { proxy as GET, proxy as POST, proxy as PATCH, proxy as PUT, proxy as DELETE };
