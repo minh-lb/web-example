@@ -5,5 +5,6 @@ import { BookingsModule } from './modules/bookings/bookings.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { HealthModule } from './modules/health/health.module';
-@Module({ imports: [DatabaseModule, ServicesModule, BookingsModule, DashboardModule, QueueModule, HealthModule] })
+import { CustomersModule } from './modules/customers/customers.module';
+@Module({ imports: [DatabaseModule, ServicesModule, BookingsModule, DashboardModule, QueueModule, HealthModule, CustomersModule] })
 export class AppModule {}
