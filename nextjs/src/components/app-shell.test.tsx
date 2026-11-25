@@ -13,5 +13,13 @@ describe("AppShell", () => {
     expect(html).toContain("Workspace");
     expect(html).toContain("Dashboard");
     expect(html).not.toContain("Job queue");
+    expect(html).not.toContain("Customers");
+  });
+  it("renders customer navigation for admins", () => {
+    const html = renderToStaticMarkup(createElement(AppShell, {
+      user: { email: "admin@bookly.local", role: "admin", name: "Admin Example" },
+      children: createElement("span", null, "Workspace"),
+    }));
+    expect(html).toContain('href="/customers"');
   });
 });
