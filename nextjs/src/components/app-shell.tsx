@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { CalendarCheck2, CalendarDays, ChevronDown, LayoutDashboard, ListTodo, LogOut, Menu, Plus, Settings2, Sparkles, X } from "lucide-react";
+import { CalendarCheck2, CalendarDays, ChevronDown, LayoutDashboard, ListTodo, LogOut, Menu, Plus, Settings2, Sparkles, Users, X } from "lucide-react";
 import clsx from "clsx";
 import type { AppRole } from "@/lib/roles";
 
@@ -12,6 +12,7 @@ const items = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/bookings", label: "Bookings", icon: CalendarDays },
   { href: "/bookings/new", label: "New booking", icon: Plus },
+  { href: "/customers", label: "Customers", icon: Users, admin: true },
   { href: "/services", label: "Services", icon: Settings2, admin: true },
   { href: "/queue", label: "Job queue", icon: ListTodo, admin: true },
 ];

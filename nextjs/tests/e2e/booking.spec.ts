@@ -151,7 +151,37 @@ test("shows an error when available services fail to load", async ({ page }) => 
   await expect(getAppAlert(page)).toHaveText(
     "Could not load services. Please refresh the page.",
   );
-  await expect(page.getByRole("heading", { name: "No active services" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Could not load services" })).toBeVisible();
+});
+
+test("distinguishes an HTTP service error from an empty list", async ({ page }) => {
+  await loginAs(page, "staff");
+  await page.route("**/api/services?*", route => route.fulfill({
+    status: 503, json: { error: "Backend unavailable" },
+  }));
+  await page.goto("/bookings/new");
+  await expect(getAppAlert(page)).toHaveText("Could not load services. Please refresh the page.");
+  await expect(page.getByRole("heading", { name: "No active services" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /continue/i })).toBeDisabled();
+});
+
+test("loads active services beyond the first backend page", async ({ page }) => {
+  await loginAs(page, "admin");
+  const service = { id: 1, name: "First service", description: "Test description",
+    category: "Coaching", durationMinutes: 60, price: 100000, color: "indigo", active: true };
+  await page.route("**/api/services?*", route => {
+    const pageNumber = Number(new URL(route.request().url()).searchParams.get("page") || 1);
+    return route.fulfill({ json: { page: pageNumber, pageSize: 50, total: 51,
+      items: pageNumber === 1
+        ? Array.from({ length: 50 }, (_, index) => ({ ...service, id: index + 1, name: "Service " + (index + 1) }))
+        : [{ ...service, id: 51, name: "Later service" }],
+    } });
+  });
+  await page.goto("/bookings/new");
+  await expect(page.getByRole("button", { name: "Later service", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Later service", exact: true }).click();
+  await page.getByRole("button", { name: /continue/i }).click();
+  await expect(page.getByRole("heading", { name: "Date & time", exact: true })).toBeVisible();
 });
 
 test("blocks choosing a slot when availability cannot be loaded", async ({ page }) => {

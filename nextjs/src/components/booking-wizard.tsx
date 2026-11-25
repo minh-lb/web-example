@@ -61,6 +61,7 @@ const SERVICE_ACCENTS: Record<string, string> = {
 export function BookingWizard() {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
+  const [servicesError, setServicesError] = useState("");
   const [step, setStep] = useState(0);
   const [serviceId, setServiceId] = useState(0);
   const [date, setDate] = useState("");
@@ -79,11 +80,24 @@ export function BookingWizard() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/services?active=true&limit=${SERVICE_PAGE_SIZE}`, { signal: controller.signal })
-      .then((response) => response.json())
-      .then((result) => setServices(result.items || []))
-      .catch(() => setError("Could not load services. Please refresh the page."))
-      .finally(() => setLoading(false));
+    async function loadServices() {
+      const all: Service[] = [];
+      for (let page = 1; ; page += 1) {
+        const response = await fetch(`/api/services?active=true&limit=${SERVICE_PAGE_SIZE}&page=${page}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Service request failed");
+        const result = await response.json() as { items: Service[]; total: number; pageSize: number };
+        all.push(...result.items);
+        if (result.items.length === 0 || page * result.pageSize >= result.total) break;
+      }
+      if (!controller.signal.aborted) setServices(all);
+    }
+    void loadServices()
+      .catch(() => {
+        if (!controller.signal.aborted) setServicesError("Could not load services. Please refresh the page.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, []);
 
@@ -125,6 +139,7 @@ export function BookingWizard() {
 
   function next() {
     setError("");
+    if (step === 0 && servicesError) return;
     if (step === 0 && !serviceId) {
       setError(SELECT_SERVICE_MESSAGE);
       return;
@@ -229,7 +244,7 @@ export function BookingWizard() {
 
   const stepIcon =
     step === 0 ? <Sparkles /> : step === 1 ? <CalendarDays /> : step === 2 ? <UserRound /> : <ShieldCheck />;
-  const displayedError = error || availabilityError;
+  const displayedError = servicesError || error || availabilityError;
 
   return (
     <div className="space-y-7">
@@ -268,7 +283,9 @@ export function BookingWizard() {
             <>
               {step === 0 && (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {services.length === 0 ? (
+                  {servicesError ? (
+                    <div className="col-span-2"><EmptyState title="Could not load services" description="Refresh the page to try again."/></div>
+                  ) : services.length === 0 ? (
                     <div className="col-span-2">
                       <EmptyState
                         title="No active services"
@@ -465,7 +482,7 @@ export function BookingWizard() {
                   </div>
                   <div className="rounded-xl bg-[#f5f4ff] px-4 py-3 text-xs leading-5 text-[#7771bd]">
                     <ShieldCheck size={15} className="mr-1 inline" />
-                    Customer details are saved in your local SQLite database for this demo.
+                    Customer details are saved in your local MySQL database for this demo.
                   </div>
                 </div>
               )}
@@ -529,7 +546,7 @@ export function BookingWizard() {
             </Button>
             {step < LAST_STEP_INDEX ? (
               <Button
-                disabled={loading || (step === 1 && availabilityLoading)}
+                disabled={loading || Boolean(servicesError) || (step === 1 && availabilityLoading)}
                 onClick={next}
               >
                 Continue <ArrowRight size={15} />
