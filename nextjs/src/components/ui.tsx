@@ -20,6 +20,7 @@ export function StatusPill({ status }: { status: string }) {
     PROCESSING: "bg-[#eaf1ff] text-[#597fca] before:bg-[#7196e7]",
     FAILED: "bg-[#f9edf0] text-[#c46c80] before:bg-[#db8092]",
     CONFIRMED: "bg-[#eaf5ef] text-[#269467] before:bg-[#29ae73]",
+    SUCCESS: "bg-[#eaf5ef] text-[#269467] before:bg-[#29ae73]",
     COMPLETED: "bg-[#edf0fc] text-[#6569b2] before:bg-[#7b82dc]",
     CANCELED: "bg-[#f9edf0] text-[#c46c80] before:bg-[#db8092]",
     Active: "bg-[#eaf5ef] text-[#269467] before:bg-[#29ae73]",

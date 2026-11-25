@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Eye } from "lucide-react";
+import { Button, EmptyState, Spinner, StatusPill } from "./ui";
 
 type AuditEvent = {
   eventID: string; eventTime: string; eventSource: string; eventName: string;
@@ -11,6 +13,34 @@ type Result = {items: AuditEvent[]; total: number; page: number; totalPages: num
 const empty: Result = {items:[], total:0, page:1, totalPages:1};
 const initial = {eventSource:"",eventName:"",actor:"",outcome:"",from:"",to:""};
 
+const actions = new Map([
+  ["CreateBooking", { action: "create", completed: "Created", resource: "booking" }],
+  ["ChangeBookingStatus", { action: "change the status of", completed: "Changed the status of", resource: "booking" }],
+  ["UpdateCustomer", { action: "update", completed: "Updated", resource: "customer" }],
+  ["CreateService", { action: "create", completed: "Created", resource: "service" }],
+  ["UpdateService", { action: "update", completed: "Updated", resource: "service" }],
+  ["ArchiveService", { action: "archive", completed: "Archived", resource: "service" }],
+  ["EnqueueJob", { action: "queue", completed: "Queued", resource: "job" }],
+  ["RetryJob", { action: "retry", completed: "Retried", resource: "job" }],
+  ["ProcessJob", { action: "process", completed: "Processed", resource: "job" }],
+]);
+
+const utcDateTime = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "medium",
+  timeStyle: "medium",
+  timeZone: "UTC",
+});
+
+function operationMessage(event: AuditEvent) {
+  const action = actions.get(event.eventName);
+  if (!action) {
+    return `${event.eventName} ${event.outcome === "SUCCESS" ? "succeeded" : "failed"}`;
+  }
+  const verb = event.outcome === "SUCCESS" ? action.completed : `Failed to ${action.action}`;
+  const resource = event.resourceId === null ? action.resource : `${action.resource} #${event.resourceId}`;
+  return `${verb} ${resource}`;
+}
+
 export function AuditLogManager() {
   const [draft,setDraft] = useState(initial);
   const [filters,setFilters] = useState(initial);
@@ -18,6 +48,7 @@ export function AuditLogManager() {
   const [refresh,setRefresh] = useState(0);
   const [result,setResult] = useState<Result>(empty);
   const [selected,setSelected] = useState<AuditEvent|null>(null);
+  const detailDialog = useRef<HTMLDialogElement>(null);
   const [loading,setLoading] = useState(true);
   const [error,setError] = useState("");
   useEffect(() => {
@@ -37,6 +68,25 @@ export function AuditLogManager() {
     })();
     return () => controller.abort();
   }, [filters,page,refresh]);
+  useEffect(() => {
+    const dialog = detailDialog.current;
+    if (selected && !dialog?.open) dialog?.showModal();
+    if (!selected && dialog?.open) dialog.close();
+  }, [selected]);
+
+  const details = selected ? [
+    ["Event time (UTC)", new Date(selected.eventTime).toISOString().replace("T", " ").replace("Z", "")],
+    ["Outcome", selected.outcome === "SUCCESS" ? "Success" : "Failed"],
+    ["Actor", selected.userIdentity.email || "System"],
+    ["Role", selected.userIdentity.role],
+    ["Source", selected.eventSource],
+    ["Event name", selected.eventName],
+    ["Resource ID", selected.resourceId ?? "—"],
+    ["HTTP status", selected.statusCode ?? "—"],
+    ["Read only", selected.readOnly ? "Yes" : "No"],
+    ["Event ID", selected.eventID],
+  ] : [];
+
   return <div className="space-y-6">
     <header className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="text-2xl font-extrabold">Audit logs</h1><p className="mt-1 text-sm text-slate-500">Business event history · timestamps in UTC</p></div>
@@ -52,24 +102,83 @@ export function AuditLogManager() {
       <div className="flex gap-2"><button type="submit" className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">Apply filters</button><button type="button" className="rounded-xl border px-4 py-2 text-sm" onClick={()=>{setDraft(initial);setFilters({...initial});setPage(1);}}>Reset</button></div>
     </form>
     <section className="surface overflow-hidden" aria-label="Event history">
-      <div className="border-b p-5 text-sm font-semibold">Event history ({result.total})</div>
-      {error && <p role="alert" className="p-5 text-red-700">{error}</p>}
-      {loading ? <p role="status" className="p-5">Loading audit logs…</p> : !error && (result.items.length === 0 ? <p className="p-5 text-slate-500">No audit events found.</p> :
-        <div className="overflow-x-auto"><table className="w-full whitespace-nowrap text-left text-sm">
-          <thead className="bg-slate-50 text-slate-600"><tr>{["Event time (UTC)","Event name","Source","Actor","Resource ID","Outcome","Details"].map(c=><th key={c} scope="col" className="px-4 py-3">{c}</th>)}</tr></thead>
-          <tbody>{result.items.map(event=><tr key={event.eventID} className="border-t">
-            <td className="px-4 py-3">{new Date(event.eventTime).toISOString().replace("T"," ").replace("Z","")}</td>
-            <td className="px-4 py-3 font-semibold">{event.eventName}</td><td className="px-4 py-3">{event.eventSource}</td>
-            <td className="px-4 py-3">{event.userIdentity.email||"System"} <span className="text-slate-500">({event.userIdentity.role})</span></td>
-            <td className="px-4 py-3">{event.resourceId??"—"}</td><td className="px-4 py-3"><span className={event.outcome==="SUCCESS"?"text-emerald-700":"text-red-700"}>{event.outcome}</span></td>
-            <td className="px-4 py-3"><button className="font-semibold text-indigo-700 underline" onClick={()=>setSelected(event)} aria-label={"View event "+event.eventID}>View</button></td>
-          </tr>)}</tbody></table></div>)}
-      <footer className="flex items-center justify-between border-t p-4 text-sm">
-        <button className="rounded-lg border px-3 py-2 disabled:opacity-40" disabled={loading||!!error||result.page<=1} onClick={()=>setPage(result.page-1)}>Previous</button>
-        <span>Page {result.page} of {result.totalPages}</span>
-        <button className="rounded-lg border px-3 py-2 disabled:opacity-40" disabled={loading||!!error||result.page>=result.totalPages} onClick={()=>setPage(result.page+1)}>Next</button>
+      {loading ? <Spinner label="Loading audit logs..."/> : error ? <p role="alert" className="p-5 text-sm text-rose-600">{error}</p>
+        : result.items.length === 0 ? <EmptyState title="No audit events found" description="Try changing or clearing the filters."/> :
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[780px] text-left text-[13px]">
+            <thead className="table-head bg-[#fafbfe]">
+              <tr>
+                <th scope="col" className="px-6 py-3">Operation</th>
+                <th scope="col" className="px-4 py-3">Actor</th>
+                <th scope="col" className="px-4 py-3">Event time (UTC)</th>
+                <th scope="col" className="px-4 py-3">Outcome</th>
+                <th scope="col" className="px-6 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.items.map(event => {
+                const message = operationMessage(event);
+                return (
+                  <tr key={event.eventID} className="table-row">
+                    <th scope="row" className="px-6 py-4">
+                      <div className="break-words font-bold">{message}</div>
+                      <div className="mt-1 text-[11px] font-normal capitalize text-[#a0aabd]">{event.eventSource}</div>
+                    </th>
+                    <td className="max-w-60 px-4 py-4">
+                      <div className="break-all font-semibold">{event.userIdentity.email || "System"}</div>
+                      <div className="mt-1 text-[11px] capitalize text-[#a0aabd]">{event.userIdentity.role}</div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-[#67748c]">
+                      <time dateTime={event.eventTime}>{utcDateTime.format(new Date(event.eventTime))}</time>
+                    </td>
+                    <td className="px-4 py-4">
+                      <StatusPill status={event.outcome === "SUCCESS" ? "SUCCESS" : "FAILED"}/>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        type="button"
+                        aria-label={`View event details: ${message}`}
+                        onClick={() => setSelected(event)}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-[#6e6adf] hover:bg-[#f1f0ff]"
+                      >
+                        <Eye size={15} aria-hidden="true"/> View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>}
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[#eef1f5] px-6 py-4 text-xs text-[#67748c]">
+        <span>Page {result.page} of {result.totalPages} · {result.total} {result.total === 1 ? "event" : "events"}</span>
+        <div className="flex gap-2">
+          <Button variant="secondary" disabled={loading || !!error || result.page <= 1} onClick={() => setPage(result.page - 1)}>Previous</Button>
+          <Button variant="secondary" disabled={loading || !!error || result.page >= result.totalPages} onClick={() => setPage(result.page + 1)}>Next</Button>
+        </div>
       </footer>
     </section>
-    {selected && <section className="surface p-5" aria-label="Event details"><div className="mb-4 flex justify-between"><h2 className="font-bold">Event details</h2><button className="text-sm font-semibold underline" onClick={()=>setSelected(null)}>Close details</button></div><pre className="overflow-x-auto rounded-lg bg-slate-50 p-4 text-xs">{JSON.stringify(selected,null,2)}</pre></section>}
+    <dialog
+      ref={detailDialog}
+      aria-labelledby="audit-detail-title"
+      onClose={() => setSelected(null)}
+      className="m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl bg-white text-slate-900 shadow-xl backdrop:bg-slate-950/50"
+    >
+      <div className="border-b border-slate-200 px-6 py-5">
+        <h2 id="audit-detail-title" className="text-lg font-bold">Event details</h2>
+        {selected && <p className="mt-1 break-words text-sm text-slate-700">{operationMessage(selected)}</p>}
+      </div>
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-4 px-6 py-5 text-sm sm:grid-cols-2">
+        {details.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-xs font-semibold text-slate-600">{label}</dt>
+            <dd className="mt-1 break-words">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="flex justify-end border-t border-slate-200 px-6 py-4">
+        <Button variant="secondary" onClick={() => detailDialog.current?.close()}>Close</Button>
+      </div>
+    </dialog>
   </div>;
 }
