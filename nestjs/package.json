@@ -1,0 +1,27 @@
+{
+  "name": "web-example-nestjs",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "worker": "node dist/worker.js",
+    "fixtures": "node dist/fixtures.js",
+    "test:unit": "node --test dist/module-graph.test.js dist/modules/*/*.test.js",
+    "test:integration": "node --test dist/integration.test.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.1.6",
+    "@nestjs/core": "11.1.6",
+    "@nestjs/platform-express": "11.1.6",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "mysql2": "3.14.4",
+    "ioredis": "5.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "@types/express": "5.0.3",
+    "typescript": "5.9.2"
+  }
+}

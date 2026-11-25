@@ -1,9 +1,8 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# web-example — local Next.js + NestJS monorepo
 
-## This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+- `nextjs/`: Next.js frontend, Keycloak/NextAuth, server-side signed BFF, Playwright and component tests.
+- `nestjs/`: NestJS API, feature modules (auth, services, bookings, dashboard, queue, health), MySQL and Redis; separate durable MySQL queue worker.
+- Organize NestJS by business feature; colocate controllers, services, repositories, policies and tests. Use explicit imports/exports, keep providers private by default, and share database connections through DatabaseModule. Controllers delegate to services; SQL belongs in repositories or dedicated read models. Preserve API response contracts and HMAC authentication; never trust browser-provided identity or role.
+- Every reusable Next.js component has a colocated test. Read installed Next.js docs before UI edits.
+- CI runs on pull requests: frontend unit/component, frontend build, backend unit, backend integration and Playwright E2E in parallel. Fixtures may only reset a database ending in _test.
+- Local-only demo secrets must not be used in production.
